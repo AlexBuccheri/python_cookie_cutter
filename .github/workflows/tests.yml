@@ -1,0 +1,57 @@
+name: Run formatting and unit tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+
+      # Can't use make command as it assumes a venv path - reconcile this
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -e ".[dev]"
+
+      - name: Check formatting
+        run: make check-format
+
+      # --cov-fail-under=-1 sets low code coverage from error to warning
+      - name: Run unit tests with code cov
+        run: pytest --junitxml=junit/test-results.xml --cov=src/ --cov-report=xml --cov-report=html  --cov-report=term --cov-fail-under=-1
+
+      - name: Upload coverage data
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-data
+          path: |
+            coverage.xml
+            .coverage
+            htmlcov/
+            junit/test-results.xml
+          if-no-files-found: ignore
+
+      - name: Summarise coverage
+        run: |
+          python -m coverage report | sed 's/^/    /' >> $GITHUB_STEP_SUMMARY
+
